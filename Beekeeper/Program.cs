@@ -15,6 +15,7 @@ namespace Beekeeper
     {
         public static string SourcePath = ConfigurationManager.AppSettings["Beehive"];
         public static string DatabaseDataSource = ConfigurationManager.AppSettings["DatabaseDataSource"];
+        public static string sourcePath = ConfigurationManager.AppSettings["Beehive"];
 
         private const string SystemVolumeInformationFolderName = "System Volume Information";
         private const string SystemRecycleBinFolderName = "$RECYCLE.BIN";
@@ -27,7 +28,7 @@ namespace Beekeeper
             {
                 var command = Args.Configuration.Configure<CommandObject>().CreateAndBind(args);
 
-                if (command.Option.Equals(CommandOption.Status))
+                if (command.Option.Equals(CommandOption.CheckStatus))
                 {
                     LogshipFolderStatus(SourcePath);
                 }
@@ -126,18 +127,11 @@ namespace Beekeeper
                 using (var sqlConnection = new SqlConnection(sqlConnectionBuilder.ConnectionString))
                 {
                     sqlConnection.Open();
-                    var query = String.Format(@"ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;", tableName);
+                    var query = String.Format(@"ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{0}];", tableName);
                     using (var sqlCommand = new SqlCommand(query, sqlConnection))
                     {
                         sqlCommand.ExecuteNonQuery();
                     }
-                    query = String.Format(@"SELECT COUNT(*) FROM sys.databases WHERE name = '{0}' AND user_access_desc = 'SINGLE_USER';", tableName);
-                    using (var sqlCommand = new SqlCommand(query, sqlConnection))
-                    {
-                        sqlCommand.ExecuteNonQuery();
-                    }
-
-                    query = String.Format(@"DROP DATABASE [{0}];", tableName);
                 }
             }
         }
