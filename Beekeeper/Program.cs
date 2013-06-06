@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -12,7 +13,8 @@ namespace Beekeeper
 {
     public class Program
     {
-        public static string sourcePath = ConfigurationManager.AppSettings["Beehive"];
+        public static string SourcePath = ConfigurationManager.AppSettings["Beehive"];
+        public static string DatabaseDataSource = ConfigurationManager.AppSettings["DatabaseDataSource"];
 
         private const string SystemVolumeInformationFolderName = "System Volume Information";
         private const string SystemRecycleBinFolderName = "$RECYCLE.BIN";
@@ -25,9 +27,9 @@ namespace Beekeeper
             {
                 var command = Args.Configuration.Configure<CommandObject>().CreateAndBind(args);
 
-                if (command.Option.Equals(CommandOption.CheckStatus))
+                if (command.Option.Equals(CommandOption.Status))
                 {
-                    CheckBeehiveStatus(sourcePath);
+                    LogshipFolderStatus(SourcePath);
                 }
             }
             catch (Exception ex)
@@ -37,7 +39,7 @@ namespace Beekeeper
             }
         }
 
-        private static void CheckBeehiveStatus(string sourcePath)
+        private static void LogshipFolderStatus(string sourcePath)
         {
             Console.WriteLine("Searching '{0}' for all directories...", sourcePath);
 
@@ -79,6 +81,65 @@ namespace Beekeeper
 
             Console.WriteLine("'{0}' issue(s) found!", issue.ToString());
             Console.WriteLine();
+        }
+
+        private static bool TableStatus(string tableName)
+        {
+            var tableExists = false;
+
+            var sqlConnectionBuilder = new SqlConnectionStringBuilder
+                {
+                    DataSource = DatabaseDataSource,
+                    InitialCatalog = tableName,
+                    IntegratedSecurity = true
+                };
+
+            using (var sqlConnection = new SqlConnection(sqlConnectionBuilder.ConnectionString))
+            {
+                sqlConnection.Open();
+                var query = String.Format(@"SELECT name FROM master.dbo.sysdatabases WHERE name = N'{0}'", tableName);
+                using (var sqlCommand = new SqlCommand(query, sqlConnection))
+                {
+                    var result = sqlCommand.ExecuteScalar();
+
+                    if (result != null && !String.IsNullOrEmpty(result.ToString()))
+                    {
+                        tableExists = true;
+                    }
+                }
+            }
+
+            return tableExists;
+        }
+
+        private static void RemoveTable(string tableName)
+        {
+            if (TableStatus(tableName))
+            {
+                var sqlConnectionBuilder = new SqlConnectionStringBuilder
+                    {
+                        DataSource = DatabaseDataSource,
+                        InitialCatalog = tableName,
+                        IntegratedSecurity = true
+                    };
+
+                using (var sqlConnection = new SqlConnection(sqlConnectionBuilder.ConnectionString))
+                {
+                    sqlConnection.Open();
+                    var query = String.Format(@"ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;", tableName);
+                    using (var sqlCommand = new SqlCommand(query, sqlConnection))
+                    {
+                        sqlCommand.ExecuteNonQuery();
+                    }
+                    query = String.Format(@"SELECT COUNT(*) FROM sys.databases WHERE name = '{0}' AND user_access_desc = 'SINGLE_USER';", tableName);
+                    using (var sqlCommand = new SqlCommand(query, sqlConnection))
+                    {
+                        sqlCommand.ExecuteNonQuery();
+                    }
+
+                    query = String.Format(@"DROP DATABASE [{0}];", tableName);
+                }
+            }
         }
     }
 }

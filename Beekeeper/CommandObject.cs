@@ -13,6 +13,6 @@ namespace Beekeeper
 
     public enum CommandOption
     {
-        CheckStatus = 1
+        Status = 1
     }
 }
