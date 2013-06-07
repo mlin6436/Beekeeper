@@ -15,10 +15,11 @@ namespace Beekeeper
     {
         public static string SourcePath = ConfigurationManager.AppSettings["Beehive"];
         public static string DatabaseDataSource = ConfigurationManager.AppSettings["DatabaseDataSource"];
-        public static string sourcePath = ConfigurationManager.AppSettings["Beehive"];
+        public static int WarningLevelRed = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelRed"]);
+        public static int WarningLevelAmber = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelAmber"]);
 
-        private const string SystemVolumeInformationFolderName = "System Volume Information";
-        private const string SystemRecycleBinFolderName = "$RECYCLE.BIN";
+        private const string SystemVolumeInformationFolder = "System Volume Information";
+        private const string RecycleBinFolder = "$RECYCLE.BIN";
         private const string FileNamePattern = @"[_|.]";
         private const string FilePostfixPattern = "*.sqb";
 
@@ -30,7 +31,7 @@ namespace Beekeeper
 
                 if (command.Option.Equals(CommandOption.CheckStatus))
                 {
-                    LogshipFolderStatus(SourcePath);
+                    CheckFolderStatus(SourcePath);
                 }
             }
             catch (Exception ex)
@@ -40,49 +41,117 @@ namespace Beekeeper
             }
         }
 
-        private static void LogshipFolderStatus(string sourcePath)
-        {
-            Console.WriteLine("Searching '{0}' for all directories...", sourcePath);
+        #region Beehive
 
-            var sourceDirectory = new DirectoryInfo(sourcePath);
-            var targetDirectories = sourceDirectory.GetDirectories().Where(d => !d.Name.Equals(SystemVolumeInformationFolderName) && !d.Name.Equals(SystemRecycleBinFolderName)).ToList();
-            Console.WriteLine("{0} directories found.", targetDirectories.Count());
+        private static void CheckFolderStatus(string path)
+        {
+            Console.WriteLine("Searching '{0}'...", path);
+
+            var dir = new DirectoryInfo(path);
+            var subDirs = dir.GetDirectories()
+                .Where(d => !d.Name.Equals(SystemVolumeInformationFolder) && !d.Name.Equals(RecycleBinFolder))
+                .ToList();
+            Console.WriteLine("--> {0} directories found in '{1}'.", subDirs.Count(), path);
             Console.WriteLine();
 
-            var issue = 0;
-            foreach (var targetDirectory in targetDirectories)
+            var red = 0;
+            var amber = 0;
+            var redList = new List<string>();
+            var amberList = new List<string>();
+            foreach (var subDir in subDirs)
             {
-                Console.WriteLine("Searching target directory '{0}' for 'TODO' items...", targetDirectory.FullName);
+                Console.WriteLine("Searching '{0}' for TODO files...", subDir.FullName);
 
-                var todoItems = targetDirectory.GetFiles(FilePostfixPattern).OrderByDescending(i => i.FullName);
-                Console.WriteLine("{0} 'TODO' items found.", todoItems.Count());
+                var fileCount = GetFileCount(subDir.FullName);
+                var warningLevel = GetWarningLevel(fileCount);
 
-                if (todoItems.Any())
+                if (warningLevel == WarningLevel.Red)
                 {
-                    // "LOG_SQL2008_<DATABASE>_<DATE>_<TIME>.sqb"
-                    var latestTodoItem = todoItems.First();
-                    var latestTodoItemNames = Regex.Split(latestTodoItem.FullName, FileNamePattern);
-                    var latestTodoItemNamesCount = latestTodoItemNames.Count();
-                    var latestTodoItemDateTime = DateTime.ParseExact(String.Format("{0} {1}", latestTodoItemNames[latestTodoItemNamesCount - 3], latestTodoItemNames[latestTodoItemNamesCount - 2]), "yyyyMMdd HHmmss", CultureInfo.InvariantCulture);
-                    var earliestTodoItem = todoItems.Last();
-                    var earliestTodoItemNames = Regex.Split(earliestTodoItem.FullName, FileNamePattern);
-                    var earliestTodoItemDateTime = DateTime.ParseExact(String.Format("{0} {1}", earliestTodoItemNames[latestTodoItemNamesCount - 3], earliestTodoItemNames[latestTodoItemNamesCount - 2]), "yyyyMMdd HHmmss", CultureInfo.InvariantCulture);
-                    Console.WriteLine("Ranging from '{0}' to '{1}'.", earliestTodoItemDateTime.ToString(), latestTodoItemDateTime.ToString());
-
-                    // give warming if log ships go back to more than one day.
-                    if (earliestTodoItemDateTime.Date <= DateTime.Now.AddDays(-1))
-                    {
-                        issue++;
-                        Console.WriteLine("----> Please investigate this issue immediately. <----");
-                    }
+                    red++;
+                    redList.Add(subDir.FullName);
+                    Console.WriteLine("[WARNNING] Please investigate this item immediately!");
+                }
+                else if (warningLevel == WarningLevel.Amber)
+                {
+                    amber++;
+                    amberList.Add(subDir.FullName);
+                    Console.WriteLine("[WARNNING] There are slight Delays on this item!");
                 }
 
                 Console.WriteLine();
             }
 
-            Console.WriteLine("'{0}' issue(s) found!", issue.ToString());
+            Console.WriteLine("Summary");
+            Console.WriteLine("Folders searched: {0}", subDirs.Count);
+            Console.WriteLine("[WARNING] RED issued: {0}", red);
+            if (redList.Any())
+            {
+                foreach (var redItem in redList)
+                {
+                    Console.WriteLine("{0} - '{1}'", redList.IndexOf(redItem), redItem);
+                }
+            }
+            Console.WriteLine("[WARNING] AMBER issued: {0}", amber);
+            if (amberList.Any())
+            {
+                foreach (var amberItem in amberList)
+                {
+                    Console.WriteLine("{0} - '{1}'", amberList.IndexOf(amberItem), amberItem);
+                }
+            }
             Console.WriteLine();
         }
+
+        private static WarningLevel GetWarningLevel(int i)
+        {
+            if (i > WarningLevelRed)
+            {
+                return WarningLevel.Red;
+            }
+
+            if (i > WarningLevelAmber)
+            {
+                return WarningLevel.Amber;
+            }
+
+            return WarningLevel.Green;
+        }
+
+        private static int GetFileCount(string path)
+        {
+            var dir = new DirectoryInfo(path);
+            var files = dir.GetFiles(FilePostfixPattern).OrderByDescending(i => i.FullName);
+            Console.WriteLine("--> TODO items found: {0}", files.Count());
+
+            if (files.Any())
+            {
+                var latestTodo = files.First();
+                var latestTodoNames = Regex.Split(latestTodo.FullName, FileNamePattern);
+                var latestTodoNamesCount = latestTodoNames.Count();
+                var latestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
+                    latestTodoNames[latestTodoNamesCount - 3],
+                    latestTodoNames[latestTodoNamesCount - 2]),
+                    "yyyyMMdd HHmmss",
+                    CultureInfo.InvariantCulture);
+
+                var earliestTodo = files.Last();
+                var earliestTodoNames = Regex.Split(earliestTodo.FullName, FileNamePattern);
+                var earliestTodoNamesCount = earliestTodoNames.Count();
+                var earliestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
+                    earliestTodoNames[earliestTodoNamesCount - 3],
+                    earliestTodoNames[earliestTodoNamesCount - 2]),
+                    "yyyyMMdd HHmmss",
+                    CultureInfo.InvariantCulture);
+
+                Console.WriteLine("--> Date between '{0}' & '{1}'.",
+                    earliestTodoDateTime.ToString(),
+                    latestTodoDateTime.ToString());
+            }
+
+            return files.Count();
+        }
+
+        #endregion
 
         private static bool TableStatus(string tableName)
         {
