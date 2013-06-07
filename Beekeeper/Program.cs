@@ -14,7 +14,7 @@ namespace Beekeeper
     public class Program
     {
         public static string SourcePath = ConfigurationManager.AppSettings["Beehive"];
-        public static string DatabaseDataSource = ConfigurationManager.AppSettings["DatabaseDataSource"];
+        public static string DataSourceName = ConfigurationManager.AppSettings["DataSourceName"];
         public static int WarningLevelRed = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelRed"]);
         public static int WarningLevelAmber = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelAmber"]);
 
@@ -41,7 +41,7 @@ namespace Beekeeper
             }
         }
 
-        #region Beehive
+        #region Nectar
 
         private static void CheckFolderStatus(string path)
         {
@@ -153,42 +153,46 @@ namespace Beekeeper
 
         #endregion
 
-        private static bool TableStatus(string tableName)
+        #region Beehive
+
+        private static bool TableExists(string serverName, string tableName)
         {
-            var tableExists = false;
+            var exists = false;
 
-            var sqlConnectionBuilder = new SqlConnectionStringBuilder
-                {
-                    DataSource = DatabaseDataSource,
-                    InitialCatalog = tableName,
-                    IntegratedSecurity = true
-                };
-
-            using (var sqlConnection = new SqlConnection(sqlConnectionBuilder.ConnectionString))
+            var connBuilder = new SqlConnectionStringBuilder
             {
-                sqlConnection.Open();
+                DataSource = serverName,
+                InitialCatalog = tableName,
+                IntegratedSecurity = true
+            };
+
+            using (var conn = new SqlConnection(connBuilder.ConnectionString))
+            {
+                conn.Open();
                 var query = String.Format(@"SELECT name FROM master.dbo.sysdatabases WHERE name = N'{0}'", tableName);
-                using (var sqlCommand = new SqlCommand(query, sqlConnection))
+                using (var cmd = new SqlCommand(query, conn))
                 {
-                    var result = sqlCommand.ExecuteScalar();
+                    var result = cmd.ExecuteScalar();
 
                     if (result != null && !String.IsNullOrEmpty(result.ToString()))
                     {
-                        tableExists = true;
+                        exists = true;
                     }
                 }
             }
 
-            return tableExists;
+            return exists;
         }
 
-        private static void RemoveTable(string tableName)
+        #endregion
+
+        private static void RemoveTable(string serverName, string tableName)
         {
-            if (TableStatus(tableName))
+            if (TableExists(serverName, tableName))
             {
                 var sqlConnectionBuilder = new SqlConnectionStringBuilder
                     {
-                        DataSource = DatabaseDataSource,
+                        DataSource = DataSourceName,
                         InitialCatalog = tableName,
                         IntegratedSecurity = true
                     };
