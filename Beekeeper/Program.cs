@@ -33,6 +33,18 @@ namespace Beekeeper
                 {
                     CheckFolderStatus(SourcePath);
                 }
+                if (command.Option.Equals(CommandOption.GenerateRestoreQuery))
+                {
+                    var databaseName = "NCRInterface";
+                    var query = GenerateRestoreQuery(databaseName,
+                        String.Format(@"\\eprhdcdbwh\f$\LogShipping-EPRHDCDBWH\{0}", databaseName),
+                        String.Format(@"\\eprhdcdbwh\f$\StandBy-EPRHDCDBWH\{0}_StandBy.dat", databaseName));
+
+                    foreach (var seg in query)
+                    {
+                        Console.WriteLine(seg);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -155,30 +167,40 @@ namespace Beekeeper
 
         #region Beehive
 
-        private static bool TableExists(string serverName, string tableName)
+        private static string GetConnectionString(string serverName, string databaseName)
         {
-            var exists = false;
-
             var connBuilder = new SqlConnectionStringBuilder
             {
                 DataSource = serverName,
-                InitialCatalog = tableName,
+                InitialCatalog = databaseName,
                 IntegratedSecurity = true
             };
 
-            using (var conn = new SqlConnection(connBuilder.ConnectionString))
+            return connBuilder.ConnectionString;
+        }
+
+        private static object ExecuteCommandWithResult(string command, string connectionString)
+        {
+            using (var conn = new SqlConnection(connectionString))
             {
                 conn.Open();
-                var query = String.Format(@"SELECT name FROM master.dbo.sysdatabases WHERE name = N'{0}'", tableName);
-                using (var cmd = new SqlCommand(query, conn))
+                using (var cmd = new SqlCommand(command, conn))
                 {
-                    var result = cmd.ExecuteScalar();
-
-                    if (result != null && !String.IsNullOrEmpty(result.ToString()))
-                    {
-                        exists = true;
-                    }
+                    return cmd.ExecuteScalar();
                 }
+            }
+        }
+
+        private static bool TableExists(string serverName, string databaseName)
+        {
+            var exists = false;
+            var command = String.Format(@"SELECT name FROM master.dbo.sysdatabases WHERE name = N'{0}'", databaseName);
+            var connectionString = GetConnectionString(serverName, databaseName);
+
+            var result = ExecuteCommandWithResult(command, connectionString);
+            if (result != null && !String.IsNullOrEmpty(result.ToString()))
+            {
+                exists = true;
             }
 
             return exists;
@@ -186,21 +208,52 @@ namespace Beekeeper
 
         #endregion
 
-        private static void RemoveTable(string serverName, string tableName)
+        #region Waggle Dance
+
+        private static List<string> GenerateRestoreQuery(string databaseName, string logshipFolderPath, string standbyFilePath)
         {
-            if (TableExists(serverName, tableName))
+            var query = new List<string>();
+
+            var dir = new DirectoryInfo(logshipFolderPath);
+            var files = dir.GetFiles(FilePostfixPattern).OrderBy(f => f.FullName);
+
+            if (files.Any())
+            {
+                foreach (var file in files)
+                {
+                    if (file == files.Last())
+                    {
+                        query.Add(String.Format("EXECUTE master..sqlbackup '-SQL \"RESTORE LOG [{0}] FROM DISK = ''{1}'' WITH STANDBY = ''{2}''\"'",
+                            databaseName, file.FullName, standbyFilePath));
+                    }
+                    else
+                    {
+                        query.Add(String.Format("EXECUTE master..sqlbackup '-SQL \"RESTORE LOG [{0}] FROM DISK = ''{1}'' WITH NORECOVERY\"'",
+                            databaseName, file.FullName));
+                    }
+                }
+            }
+            
+            return query;
+        }
+
+        #endregion
+
+        private static void RemoveTable(string serverName, string databaseName)
+        {
+            if (TableExists(serverName, databaseName))
             {
                 var sqlConnectionBuilder = new SqlConnectionStringBuilder
                     {
                         DataSource = DataSourceName,
-                        InitialCatalog = tableName,
+                        InitialCatalog = databaseName,
                         IntegratedSecurity = true
                     };
 
                 using (var sqlConnection = new SqlConnection(sqlConnectionBuilder.ConnectionString))
                 {
                     sqlConnection.Open();
-                    var query = String.Format(@"ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{0}];", tableName);
+                    var query = String.Format(@"ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{0}];", databaseName);
                     using (var sqlCommand = new SqlCommand(query, sqlConnection))
                     {
                         sqlCommand.ExecuteNonQuery();

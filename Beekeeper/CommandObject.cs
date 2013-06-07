@@ -13,6 +13,7 @@ namespace Beekeeper
 
     public enum CommandOption
     {
-        CheckStatus = 1
+        CheckStatus = 1,
+        GenerateRestoreQuery = 2,
     }
 }
