@@ -20,5 +20,8 @@ namespace Beekeeper
 
         [ArgsMemberSwitch("database")]
         public string Database { get; set; }
+
+        [ArgsMemberSwitch("bak", "databasebackupfile")]
+        public string DatabaseBackupFile { get; set; }
     }
 }

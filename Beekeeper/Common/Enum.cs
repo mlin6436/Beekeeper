@@ -10,6 +10,7 @@ namespace Beekeeper
     {
         CheckStatus,
         DropDatabase,
+        RestoreDatabase,
         GenerateRestoreQuery,
     }
 

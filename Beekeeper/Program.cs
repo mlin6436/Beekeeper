@@ -1,4 +1,5 @@
 ﻿using Microsoft.SqlServer.Management.Common;
+using Microsoft.SqlServer.Management.Sdk.Sfc;
 using Microsoft.SqlServer.Management.Smo;
 using System;
 using System.Collections.Generic;
@@ -15,16 +16,13 @@ namespace Beekeeper
 {
     public class Program
     {
-        public static string SourcePath = ConfigurationManager.AppSettings["Beehive"];
-        public static string DataSourceName = ConfigurationManager.AppSettings["DataSourceName"];
+        public static string SystemVolumeInformationFolder = ConfigurationManager.AppSettings["SystemVolumeInformationFolder"];
+        public static string RecycleBinFolder = ConfigurationManager.AppSettings["RecycleBinFolder"];
+        public static string FileNamePattern = ConfigurationManager.AppSettings["FileNamePattern"];
+        public static string FilePostfixPattern = ConfigurationManager.AppSettings["FilePostfixPattern"];
+        public static string FileDateTimePattern = ConfigurationManager.AppSettings["FileDateTimePattern"];
         public static int WarningLevelRed = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelRed"]);
         public static int WarningLevelAmber = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelAmber"]);
-
-        private const string SystemVolumeInformationFolder = "System Volume Information";
-        private const string RecycleBinFolder = "$RECYCLE.BIN";
-        private const string FileNamePattern = @"[_|.]";
-        private const string FilePostfixPattern = "*.sqb";
-        private const string FileDateTimePattern = "yyyyMMdd HHmmss";
 
         public static void Main(string[] args)
         {
@@ -56,32 +54,35 @@ namespace Beekeeper
                         return;
                     }
 
-                    var server = InitialiseServer(command.Server);
-                    var database = server.Databases[command.Database];
-
-                    Console.WriteLine("About to drop database: {0} on server {1}", command.Database, command.Server);
-                    if (database != null)
+                    DropDatabase(command.Server, command.Database);
+                }
+                else if (command.Action.Equals(CommandOption.RestoreDatabase))
+                {
+                    if (String.IsNullOrEmpty(command.Server))
                     {
-                        database.Drop();
-                        Console.WriteLine("Successfully dropped databse.");
+                        Console.WriteLine("Server does not exist!");
+                        return;
                     }
-                    else
+
+                    if (String.IsNullOrEmpty(command.Database))
                     {
                         Console.WriteLine("Database does not exist!");
+                        return;
                     }
-                }
-                //if (command.Action.Equals(CommandOption.GenerateRestoreQuery))
-                //{
-                //    var databaseName = "NCRInterface";
-                //    var query = GenerateRestoreQuery(databaseName,
-                //        String.Format(@"\\eprhdcdbwh\f$\LogShipping-EPRHDCDBWH\{0}", databaseName),
-                //        String.Format(@"\\eprhdcdbwh\f$\StandBy-EPRHDCDBWH\{0}_StandBy.dat", databaseName));
 
-                //    foreach (var seg in query)
-                //    {
-                //        Console.WriteLine(seg);
-                //    }
-                //}
+                    if (String.IsNullOrEmpty(command.DatabaseBackupFile))
+                    {
+                        Console.WriteLine("Database backup file does not exist!");
+                        return;
+                    }
+
+                    RestoreDatabase(command.Server, command.Database, command.DatabaseBackupFile);
+                }
+                else
+                {
+                    Console.WriteLine("Command cannot be found!");
+                    Console.WriteLine();
+                }
             }
             catch (Exception ex)
             {
@@ -105,7 +106,7 @@ namespace Beekeeper
             foreach (var logship in logships)
             {
                 Console.WriteLine("----> Searching '{0}' ...", logship.Name);
-                Console.WriteLine("TODO items found: {0}", logship.ItemCount);
+                Console.WriteLine("To process items found: {0}", logship.ItemCount);
                 Console.WriteLine("Date between '{0}' & '{1}'.", logship.StartTime, logship.EndTime);
                 Console.WriteLine();
             }
@@ -150,25 +151,25 @@ namespace Beekeeper
 
                 if (logshipFiles.Any())
                 {
-                    var latestTodo = logshipFiles.First();
-                    var latestTodoNames = Regex.Split(latestTodo.FullName, FileNamePattern);
-                    var latestTodoNamesCount = latestTodoNames.Count();
-                    var latestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
-                        latestTodoNames[latestTodoNamesCount - 3],
-                        latestTodoNames[latestTodoNamesCount - 2]),
+                    var latestToProcess = logshipFiles.First();
+                    var latestToProcessNames = Regex.Split(latestToProcess.FullName, FileNamePattern);
+                    var latestToProcessNamesCount = latestToProcessNames.Count();
+                    var latestToProcessDateTime = DateTime.ParseExact(String.Format("{0} {1}",
+                        latestToProcessNames[latestToProcessNamesCount - 3],
+                        latestToProcessNames[latestToProcessNamesCount - 2]),
                         FileDateTimePattern,
                         CultureInfo.InvariantCulture);
-                    logship.EndTime = latestTodoDateTime;
+                    logship.EndTime = latestToProcessDateTime;
 
-                    var earliestTodo = logshipFiles.Last();
-                    var earliestTodoNames = Regex.Split(earliestTodo.FullName, FileNamePattern);
-                    var earliestTodoNamesCount = earliestTodoNames.Count();
-                    var earliestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
-                        earliestTodoNames[earliestTodoNamesCount - 3],
-                        earliestTodoNames[earliestTodoNamesCount - 2]),
+                    var earliestToProcess = logshipFiles.Last();
+                    var earliestToProcessNames = Regex.Split(earliestToProcess.FullName, FileNamePattern);
+                    var earliestToProcessNamesCount = earliestToProcessNames.Count();
+                    var earliestToProcessDateTime = DateTime.ParseExact(String.Format("{0} {1}",
+                        earliestToProcessNames[earliestToProcessNamesCount - 3],
+                        earliestToProcessNames[earliestToProcessNamesCount - 2]),
                         FileDateTimePattern,
                         CultureInfo.InvariantCulture);
-                    logship.StartTime = earliestTodoDateTime;
+                    logship.StartTime = earliestToProcessDateTime;
 
                 }
 
@@ -182,7 +183,9 @@ namespace Beekeeper
         {
             var connection = new ServerConnection(serverInstance)
                 {
-                    // TODO: log in credential
+                    // Specify log in credential.
+                    //Login = "testuser",
+                    //Password = "password",
                     LoginSecure = true
                 };
 
@@ -191,7 +194,48 @@ namespace Beekeeper
             return sqlServer;
         }
 
-        #region Beehive
+        private static void DropDatabase(string serverName, string databaseName)
+        {
+            var server = InitialiseServer(serverName);
+            var database = server.Databases[databaseName];
+
+            Console.WriteLine("About to drop database '{0}' on server '{1}'", databaseName, serverName);
+            if (database != null)
+            {
+                // Might need to kill all existing connections to database before dropping it.
+                //server.KillAllProcesses(databaseName);
+                //server.KillDatabase(databaseName);
+                database.Drop();
+                Console.WriteLine("Successfully dropped databse.");
+            }
+            else
+            {
+                Console.WriteLine("Database does not exist!");
+            }
+            Console.WriteLine();
+        }
+
+        private static void RestoreDatabase(string serverName, string databaseName, string databaseBackupFileLocation)
+        {
+            Console.WriteLine("About to restore database '{0}' on server '{1}'", databaseName, serverName);
+            var server = InitialiseServer(serverName);
+            var restore = new Restore
+            {
+                Database = databaseName,
+                Action = RestoreActionType.Database,
+                ReplaceDatabase = true,
+            };
+            restore.Devices.AddDevice(databaseBackupFileLocation, DeviceType.File);
+            // Relocating mdf and ldf files.
+            //restore.RelocateFiles.Add(new RelocateFile(command.Database, String.Format(@"C:\{0}.mdf", command.Database)));
+            //restore.RelocateFiles.Add(new RelocateFile(String.Format("{0}_Log", command.Database), String.Format(@"C:\{0}_Log.ldf", command.Database)));
+
+            restore.SqlRestore(server);
+            Console.WriteLine("Successfully restored databse.");
+            Console.WriteLine();
+        }
+
+
 
         private static string GetConnectionString(string serverName, string databaseName)
         {
@@ -232,10 +276,6 @@ namespace Beekeeper
             return exists;
         }
 
-        #endregion
-
-        #region Waggle Dance
-
         private static List<string> GenerateRestoreQuery(string databaseName, string logshipFolderPath, string standbyFilePath)
         {
             var query = new List<string>();
@@ -261,31 +301,6 @@ namespace Beekeeper
             }
             
             return query;
-        }
-
-        #endregion
-
-        private static void RemoveTable(string serverName, string databaseName)
-        {
-            if (TableExists(serverName, databaseName))
-            {
-                var sqlConnectionBuilder = new SqlConnectionStringBuilder
-                    {
-                        DataSource = DataSourceName,
-                        InitialCatalog = databaseName,
-                        IntegratedSecurity = true
-                    };
-
-                using (var sqlConnection = new SqlConnection(sqlConnectionBuilder.ConnectionString))
-                {
-                    sqlConnection.Open();
-                    var query = String.Format(@"ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{0}];", databaseName);
-                    using (var sqlCommand = new SqlCommand(query, sqlConnection))
-                    {
-                        sqlCommand.ExecuteNonQuery();
-                    }
-                }
-            }
         }
     }
 }
