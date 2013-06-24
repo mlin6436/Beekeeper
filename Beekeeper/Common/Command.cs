@@ -14,5 +14,11 @@ namespace Beekeeper
 
         [ArgsMemberSwitch("d", "directory")]
         public string Directory { get; set; }
+
+        [ArgsMemberSwitch("server")]
+        public string Server { get; set; }
+
+        [ArgsMemberSwitch("database")]
+        public string Database { get; set; }
     }
 }

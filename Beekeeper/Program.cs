@@ -24,6 +24,7 @@ namespace Beekeeper
         private const string RecycleBinFolder = "$RECYCLE.BIN";
         private const string FileNamePattern = @"[_|.]";
         private const string FilePostfixPattern = "*.sqb";
+        private const string FileDateTimePattern = "yyyyMMdd HHmmss";
 
         public static void Main(string[] args)
         {
@@ -35,7 +36,7 @@ namespace Beekeeper
                 {
                     if (String.IsNullOrEmpty(command.Directory))
                     {
-                        Console.WriteLine("The directory does not exist!");
+                        Console.WriteLine("Directory does not exist!");
                         return;
                     }
 
@@ -43,7 +44,31 @@ namespace Beekeeper
                 }
                 else if (command.Action.Equals(CommandOption.DropDatabase))
                 {
+                    if (String.IsNullOrEmpty(command.Server))
+                    {
+                        Console.WriteLine("Server does not exist!");
+                        return;
+                    }
 
+                    if (String.IsNullOrEmpty(command.Database))
+                    {
+                        Console.WriteLine("Database does not exist!");
+                        return;
+                    }
+
+                    var server = InitialiseServer(command.Server);
+                    var database = server.Databases[command.Database];
+
+                    Console.WriteLine("About to drop database: {0} on server {1}", command.Database, command.Server);
+                    if (database != null)
+                    {
+                        database.Drop();
+                        Console.WriteLine("Successfully dropped databse.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Database does not exist!");
+                    }
                 }
                 //if (command.Action.Equals(CommandOption.GenerateRestoreQuery))
                 //{
@@ -105,7 +130,11 @@ namespace Beekeeper
 
             foreach (var logshipFolder in logshipFolders)
             {
-                var logship = new Logship { Path = logshipFolder.FullName, Name = logshipFolder.Name };
+                var logship = new Logship
+                    {
+                        Path = logshipFolder.FullName, 
+                        Name = logshipFolder.Name
+                    };
 
                 var logshipDirectory = new DirectoryInfo(logshipFolder.FullName);
                 var logshipFiles = logshipDirectory.GetFiles(FilePostfixPattern).OrderByDescending(i => i.FullName);
@@ -127,7 +156,7 @@ namespace Beekeeper
                     var latestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
                         latestTodoNames[latestTodoNamesCount - 3],
                         latestTodoNames[latestTodoNamesCount - 2]),
-                        "yyyyMMdd HHmmss",
+                        FileDateTimePattern,
                         CultureInfo.InvariantCulture);
                     logship.EndTime = latestTodoDateTime;
 
@@ -137,7 +166,7 @@ namespace Beekeeper
                     var earliestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
                         earliestTodoNames[earliestTodoNamesCount - 3],
                         earliestTodoNames[earliestTodoNamesCount - 2]),
-                        "yyyyMMdd HHmmss",
+                        FileDateTimePattern,
                         CultureInfo.InvariantCulture);
                     logship.StartTime = earliestTodoDateTime;
 
@@ -151,8 +180,11 @@ namespace Beekeeper
 
         private static Server InitialiseServer(string serverInstance)
         {
-            var connection = new ServerConnection(serverInstance);
-            connection.LoginSecure = false;
+            var connection = new ServerConnection(serverInstance)
+                {
+                    // TODO: log in credential
+                    LoginSecure = true
+                };
 
             var sqlServer = new Server(connection);
 
