@@ -52,7 +52,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CommandObject.cs" />
+    <Compile Include="Common\Command.cs" />
     <Compile Include="Common\Enum.cs" />
     <Compile Include="Common\Logship.cs" />
     <Compile Include="Program.cs" />

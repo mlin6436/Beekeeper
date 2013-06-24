@@ -29,7 +29,7 @@ namespace Beekeeper
         {
             try
             {
-                var command = Args.Configuration.Configure<CommandObject>().CreateAndBind(args);
+                var command = Args.Configuration.Configure<Command>().CreateAndBind(args);
 
                 if (command.Action.Equals(CommandOption.CheckStatus))
                 {

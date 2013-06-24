@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Beekeeper
 {
-    public class CommandObject
+    public class Command
     {
         [ArgsMemberSwitch("a", "action")]
         public CommandOption Action { get; set; }
