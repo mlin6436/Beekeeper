@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Args;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,12 +9,16 @@ namespace Beekeeper
 {
     public class CommandObject
     {
-        public CommandOption Option { get; set; }
+        [ArgsMemberSwitch("a", "action")]
+        public CommandOption Action { get; set; }
+
+        [ArgsMemberSwitch("d", "directory")]
+        public string Directory { get; set; }
     }
 
     public enum CommandOption
     {
-        CheckStatus = 1,
-        GenerateRestoreQuery = 2,
+        CheckStatus,
+        GenerateRestoreQuery,
     }
 }

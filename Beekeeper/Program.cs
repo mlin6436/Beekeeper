@@ -29,22 +29,28 @@ namespace Beekeeper
             {
                 var command = Args.Configuration.Configure<CommandObject>().CreateAndBind(args);
 
-                if (command.Option.Equals(CommandOption.CheckStatus))
+                if (command.Action.Equals(CommandOption.CheckStatus))
                 {
-                    CheckFolderStatus(SourcePath);
-                }
-                if (command.Option.Equals(CommandOption.GenerateRestoreQuery))
-                {
-                    var databaseName = "NCRInterface";
-                    var query = GenerateRestoreQuery(databaseName,
-                        String.Format(@"\\eprhdcdbwh\f$\LogShipping-EPRHDCDBWH\{0}", databaseName),
-                        String.Format(@"\\eprhdcdbwh\f$\StandBy-EPRHDCDBWH\{0}_StandBy.dat", databaseName));
-
-                    foreach (var seg in query)
+                    if (String.IsNullOrEmpty(command.Directory))
                     {
-                        Console.WriteLine(seg);
+                        Console.WriteLine("The directory does not exist!");
+                        return;
                     }
+
+                    CheckFolderStatus(command.Directory);
                 }
+                //if (command.Action.Equals(CommandOption.GenerateRestoreQuery))
+                //{
+                //    var databaseName = "NCRInterface";
+                //    var query = GenerateRestoreQuery(databaseName,
+                //        String.Format(@"\\eprhdcdbwh\f$\LogShipping-EPRHDCDBWH\{0}", databaseName),
+                //        String.Format(@"\\eprhdcdbwh\f$\StandBy-EPRHDCDBWH\{0}_StandBy.dat", databaseName));
+
+                //    foreach (var seg in query)
+                //    {
+                //        Console.WriteLine(seg);
+                //    }
+                //}
             }
             catch (Exception ex)
             {
