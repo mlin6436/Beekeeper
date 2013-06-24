@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Microsoft.SqlServer.Management.Common;
+using Microsoft.SqlServer.Management.Smo;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
@@ -37,7 +39,11 @@ namespace Beekeeper
                         return;
                     }
 
-                    CheckFolderStatus(command.Directory);
+                    CheckStatus(command.Directory);
+                }
+                else if (command.Action.Equals(CommandOption.DropDatabase))
+                {
+
                 }
                 //if (command.Action.Equals(CommandOption.GenerateRestoreQuery))
                 //{
@@ -58,118 +64,100 @@ namespace Beekeeper
                 throw;
             }
         }
-
-        #region Nectar
-
-        private static void CheckFolderStatus(string path)
+       
+        private static void CheckStatus(string directoryPath)
         {
-            Console.WriteLine("Searching '{0}'...", path);
+            Console.WriteLine("--> Searching '{0}' ...", directoryPath);
 
-            var dir = new DirectoryInfo(path);
-            var subDirs = dir.GetDirectories()
-                .Where(d => !d.Name.Equals(SystemVolumeInformationFolder) && !d.Name.Equals(RecycleBinFolder))
-                .ToList();
-            Console.WriteLine("--> {0} directories found in '{1}'.", subDirs.Count(), path);
+            var directory = new DirectoryInfo(directoryPath);
+            var logshipFolders = directory.GetDirectories().Where(d => !d.Name.Equals(SystemVolumeInformationFolder) && !d.Name.Equals(RecycleBinFolder)).ToList();
+
+            Console.WriteLine("Directories found: {0}", logshipFolders.Count(), directoryPath);
             Console.WriteLine();
 
-            var red = 0;
-            var amber = 0;
-            var redList = new List<string>();
-            var amberList = new List<string>();
-            foreach (var subDir in subDirs)
+            var logships = GetLogshipInfo(logshipFolders);
+
+            foreach (var logship in logships)
             {
-                Console.WriteLine("Searching '{0}' for TODO files...", subDir.FullName);
-
-                var fileCount = GetFileCount(subDir.FullName);
-                var warningLevel = GetWarningLevel(fileCount);
-
-                if (warningLevel == WarningLevel.Red)
-                {
-                    red++;
-                    redList.Add(subDir.FullName);
-                    Console.WriteLine("[WARNNING] Please investigate this item immediately!");
-                }
-                else if (warningLevel == WarningLevel.Amber)
-                {
-                    amber++;
-                    amberList.Add(subDir.FullName);
-                    Console.WriteLine("[WARNNING] There are slight Delays on this item!");
-                }
-
+                Console.WriteLine("----> Searching '{0}' ...", logship.Name);
+                Console.WriteLine("TODO items found: {0}", logship.ItemCount);
+                Console.WriteLine("Date between '{0}' & '{1}'.", logship.StartTime, logship.EndTime);
                 Console.WriteLine();
             }
-
-            Console.WriteLine("Summary");
-            Console.WriteLine("Folders searched: {0}", subDirs.Count);
-            Console.WriteLine("[WARNING] RED issued: {0}", red);
-            if (redList.Any())
+            Console.WriteLine("--> Summary");
+            Console.WriteLine("Folders searched: {0}", logshipFolders.Count);
+            Console.WriteLine("[RED] warning issued: {0}", logships.Count(l => l.Warning == WarningLevel.Red));
+            foreach (var logship in logships.Where(l => l.Warning == WarningLevel.Red))
             {
-                foreach (var redItem in redList)
-                {
-                    Console.WriteLine("{0} - '{1}'", redList.IndexOf(redItem), redItem);
-                }
+                Console.WriteLine("'{0}' - total: {1}", logship.Name, logship.ItemCount);
             }
-            Console.WriteLine("[WARNING] AMBER issued: {0}", amber);
-            if (amberList.Any())
+            Console.WriteLine("[AMBER] warning issued: {0}", logships.Count(l => l.Warning == WarningLevel.Amber));
+            foreach (var logship in logships.Where(l => l.Warning == WarningLevel.Amber))
             {
-                foreach (var amberItem in amberList)
-                {
-                    Console.WriteLine("{0} - '{1}'", amberList.IndexOf(amberItem), amberItem);
-                }
+                Console.WriteLine("'{0}' - total: {1}", logship.Name, logship.ItemCount);
             }
             Console.WriteLine();
         }
 
-        private static WarningLevel GetWarningLevel(int i)
+        private static List<Logship> GetLogshipInfo(List<DirectoryInfo> logshipFolders)
         {
-            if (i > WarningLevelRed)
+            var logships = new List<Logship>();
+
+            foreach (var logshipFolder in logshipFolders)
             {
-                return WarningLevel.Red;
+                var logship = new Logship { Path = logshipFolder.FullName, Name = logshipFolder.Name };
+
+                var logshipDirectory = new DirectoryInfo(logshipFolder.FullName);
+                var logshipFiles = logshipDirectory.GetFiles(FilePostfixPattern).OrderByDescending(i => i.FullName);
+                logship.ItemCount = logshipFiles.Count();
+                if (logship.ItemCount > WarningLevelRed)
+                {
+                    logship.Warning = WarningLevel.Red;
+                }
+                else if (logship.ItemCount < WarningLevelRed && logship.ItemCount > WarningLevelAmber)
+                {
+                    logship.Warning = WarningLevel.Amber;
+                }
+
+                if (logshipFiles.Any())
+                {
+                    var latestTodo = logshipFiles.First();
+                    var latestTodoNames = Regex.Split(latestTodo.FullName, FileNamePattern);
+                    var latestTodoNamesCount = latestTodoNames.Count();
+                    var latestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
+                        latestTodoNames[latestTodoNamesCount - 3],
+                        latestTodoNames[latestTodoNamesCount - 2]),
+                        "yyyyMMdd HHmmss",
+                        CultureInfo.InvariantCulture);
+                    logship.EndTime = latestTodoDateTime;
+
+                    var earliestTodo = logshipFiles.Last();
+                    var earliestTodoNames = Regex.Split(earliestTodo.FullName, FileNamePattern);
+                    var earliestTodoNamesCount = earliestTodoNames.Count();
+                    var earliestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
+                        earliestTodoNames[earliestTodoNamesCount - 3],
+                        earliestTodoNames[earliestTodoNamesCount - 2]),
+                        "yyyyMMdd HHmmss",
+                        CultureInfo.InvariantCulture);
+                    logship.StartTime = earliestTodoDateTime;
+
+                }
+
+                logships.Add(logship);
             }
 
-            if (i > WarningLevelAmber)
-            {
-                return WarningLevel.Amber;
-            }
-
-            return WarningLevel.Green;
+            return logships;
         }
 
-        private static int GetFileCount(string path)
+        private static Server InitialiseServer(string serverInstance)
         {
-            var dir = new DirectoryInfo(path);
-            var files = dir.GetFiles(FilePostfixPattern).OrderByDescending(i => i.FullName);
-            Console.WriteLine("--> TODO items found: {0}", files.Count());
+            var connection = new ServerConnection(serverInstance);
+            connection.LoginSecure = false;
 
-            if (files.Any())
-            {
-                var latestTodo = files.First();
-                var latestTodoNames = Regex.Split(latestTodo.FullName, FileNamePattern);
-                var latestTodoNamesCount = latestTodoNames.Count();
-                var latestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
-                    latestTodoNames[latestTodoNamesCount - 3],
-                    latestTodoNames[latestTodoNamesCount - 2]),
-                    "yyyyMMdd HHmmss",
-                    CultureInfo.InvariantCulture);
+            var sqlServer = new Server(connection);
 
-                var earliestTodo = files.Last();
-                var earliestTodoNames = Regex.Split(earliestTodo.FullName, FileNamePattern);
-                var earliestTodoNamesCount = earliestTodoNames.Count();
-                var earliestTodoDateTime = DateTime.ParseExact(String.Format("{0} {1}",
-                    earliestTodoNames[earliestTodoNamesCount - 3],
-                    earliestTodoNames[earliestTodoNamesCount - 2]),
-                    "yyyyMMdd HHmmss",
-                    CultureInfo.InvariantCulture);
-
-                Console.WriteLine("--> Date between '{0}' & '{1}'.",
-                    earliestTodoDateTime.ToString(),
-                    latestTodoDateTime.ToString());
-            }
-
-            return files.Count();
+            return sqlServer;
         }
-
-        #endregion
 
         #region Beehive
 

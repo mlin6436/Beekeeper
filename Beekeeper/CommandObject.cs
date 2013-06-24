@@ -15,10 +15,4 @@ namespace Beekeeper
         [ArgsMemberSwitch("d", "directory")]
         public string Directory { get; set; }
     }
-
-    public enum CommandOption
-    {
-        CheckStatus,
-        GenerateRestoreQuery,
-    }
 }
