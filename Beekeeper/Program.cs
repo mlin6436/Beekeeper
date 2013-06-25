@@ -90,18 +90,22 @@ namespace Beekeeper
                 throw;
             }
         }
-       
-        private static void CheckStatus(string directoryPath)
+
+        /// <summary>
+        /// Check logship folder for status of logship items.
+        /// </summary>
+        /// <param name="path">Path to all logship directories</param>
+        private static void CheckStatus(string path)
         {
-            Console.WriteLine("--> Searching '{0}' ...", directoryPath);
+            Console.WriteLine("--> Searching '{0}' ...", path);
 
-            var directory = new DirectoryInfo(directoryPath);
-            var logshipFolders = directory.GetDirectories().Where(d => !d.Name.Equals(SystemVolumeInformationFolder) && !d.Name.Equals(RecycleBinFolder)).ToList();
+            var directory = new DirectoryInfo(path);
+            var logshipDirectories = directory.GetDirectories().Where(d => !d.Name.Equals(SystemVolumeInformationFolder) && !d.Name.Equals(RecycleBinFolder)).ToList();
 
-            Console.WriteLine("Directories found: {0}", logshipFolders.Count(), directoryPath);
+            Console.WriteLine("Directories found: {0}", logshipDirectories.Count());
             Console.WriteLine();
 
-            var logships = GetLogshipInfo(logshipFolders);
+            var logships = GetLogshipInfo(logshipDirectories);
 
             foreach (var logship in logships)
             {
@@ -111,7 +115,7 @@ namespace Beekeeper
                 Console.WriteLine();
             }
             Console.WriteLine("--> Summary");
-            Console.WriteLine("Folders searched: {0}", logshipFolders.Count);
+            Console.WriteLine("Folders searched: {0}", logshipDirectories.Count);
             Console.WriteLine("[RED] warning issued: {0}", logships.Count(l => l.Warning == WarningLevel.Red));
             foreach (var logship in logships.Where(l => l.Warning == WarningLevel.Red))
             {
@@ -125,11 +129,16 @@ namespace Beekeeper
             Console.WriteLine();
         }
 
-        private static List<Logship> GetLogshipInfo(List<DirectoryInfo> logshipFolders)
+        /// <summary>
+        /// Get a list of logship information.
+        /// </summary>
+        /// <param name="logshipDirectories">List of logship directories</param>
+        /// <returns>A list of logship information</returns>
+        private static List<Logship> GetLogshipInfo(List<DirectoryInfo> logshipDirectories)
         {
             var logships = new List<Logship>();
 
-            foreach (var logshipFolder in logshipFolders)
+            foreach (var logshipFolder in logshipDirectories)
             {
                 var logship = new Logship
                     {
@@ -179,21 +188,34 @@ namespace Beekeeper
             return logships;
         }
 
-        private static Server InitialiseServer(string serverInstance)
+        /// <summary>
+        /// Initialise server information.
+        /// </summary>
+        /// <param name="serverName">Server name</param>
+        /// <returns>Server instance</returns>
+        private static Server InitialiseServer(string serverName, string login = null, string password = null)
         {
-            var connection = new ServerConnection(serverInstance)
+            var connection = new ServerConnection(serverName)
                 {
-                    // Specify log in credential.
-                    //Login = "testuser",
-                    //Password = "password",
                     LoginSecure = true
                 };
+
+            if (!String.IsNullOrEmpty(login) && !String.IsNullOrEmpty(password))
+            {
+                connection.Login = login;
+                connection.Password = password;
+            }
 
             var sqlServer = new Server(connection);
 
             return sqlServer;
         }
 
+        /// <summary>
+        /// Drop database.
+        /// </summary>
+        /// <param name="serverName">Server name</param>
+        /// <param name="databaseName">Database name</param>
         private static void DropDatabase(string serverName, string databaseName)
         {
             var server = InitialiseServer(serverName);
@@ -202,9 +224,8 @@ namespace Beekeeper
             Console.WriteLine("About to drop database '{0}' on server '{1}'", databaseName, serverName);
             if (database != null)
             {
-                // Might need to kill all existing connections to database before dropping it.
-                //server.KillAllProcesses(databaseName);
-                //server.KillDatabase(databaseName);
+                server.KillAllProcesses(databaseName);
+                server.KillDatabase(databaseName);
                 database.Drop();
                 Console.WriteLine("Successfully dropped databse.");
             }
@@ -215,7 +236,19 @@ namespace Beekeeper
             Console.WriteLine();
         }
 
-        private static void RestoreDatabase(string serverName, string databaseName, string databaseBackupFileLocation)
+        /// <summary>
+        /// Restore database from .bak file.
+        /// NOTE: Make sure the server is compatible with the back up file.
+        /// NOTE: In case that back up was done via RedGate SQLBackup, the file needs to be converted from .sqb file into .bak.
+        ///     Go to "C:\Program Files\Red Gate\SQL Backup 6".
+        ///     Use "SQBConverter.exe inputfile outputfile [password] [/sqb]" to convert.
+        /// </summary>
+        /// <param name="serverName">Server name</param>
+        /// <param name="databaseName">Database name</param>
+        /// <param name="databaseBackupFileLocation">Database backup file location</param>
+        /// <param name="mdfFileLocation">MDF file location</param>
+        /// <param name="ldfFileLocation">LDF file location</param>
+        private static void RestoreDatabase(string serverName, string databaseName, string databaseBackupFileLocation, string mdfFileLocation = null, string ldfFileLocation = null)
         {
             Console.WriteLine("About to restore database '{0}' on server '{1}'", databaseName, serverName);
             var server = InitialiseServer(serverName);
@@ -226,10 +259,13 @@ namespace Beekeeper
                 ReplaceDatabase = true,
             };
             restore.Devices.AddDevice(databaseBackupFileLocation, DeviceType.File);
-            // Relocating mdf and ldf files.
-            //restore.RelocateFiles.Add(new RelocateFile(command.Database, String.Format(@"C:\{0}.mdf", command.Database)));
-            //restore.RelocateFiles.Add(new RelocateFile(String.Format("{0}_Log", command.Database), String.Format(@"C:\{0}_Log.ldf", command.Database)));
 
+            if (!String.IsNullOrEmpty(mdfFileLocation) && !String.IsNullOrEmpty(ldfFileLocation))
+            {
+                restore.RelocateFiles.Add(new RelocateFile(databaseName, String.Format(@"{0}\{1}.mdf", mdfFileLocation, databaseName)));
+                restore.RelocateFiles.Add(new RelocateFile(String.Format("{0}_Log", databaseName), String.Format(@"{0}\{1}.ldf", ldfFileLocation, databaseName)));
+            }
+            
             restore.SqlRestore(server);
             Console.WriteLine("Successfully restored databse.");
             Console.WriteLine();
