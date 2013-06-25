@@ -1,4 +1,5 @@
-﻿using Microsoft.SqlServer.Management.Common;
+﻿using System.Data;
+using Microsoft.SqlServer.Management.Common;
 using Microsoft.SqlServer.Management.Sdk.Sfc;
 using Microsoft.SqlServer.Management.Smo;
 using System;
@@ -98,13 +99,11 @@ namespace Beekeeper
         private static void CheckStatus(string path)
         {
             Console.WriteLine("--> Searching '{0}' ...", path);
-
             var directory = new DirectoryInfo(path);
             var logshipDirectories = directory.GetDirectories().Where(d => !d.Name.Equals(SystemVolumeInformationFolder) && !d.Name.Equals(RecycleBinFolder)).ToList();
 
             Console.WriteLine("Directories found: {0}", logshipDirectories.Count());
             Console.WriteLine();
-
             var logships = GetLogshipInfo(logshipDirectories);
 
             foreach (var logship in logships)
@@ -218,21 +217,24 @@ namespace Beekeeper
         /// <param name="databaseName">Database name</param>
         private static void DropDatabase(string serverName, string databaseName)
         {
+            Console.WriteLine("About to drop database '{0}' on server '{1}' ...", databaseName, serverName);
+
             var server = InitialiseServer(serverName);
             var database = server.Databases[databaseName];
 
-            Console.WriteLine("About to drop database '{0}' on server '{1}'", databaseName, serverName);
             if (database != null)
             {
+                Console.WriteLine("Dropping database ...");
                 server.KillAllProcesses(databaseName);
                 server.KillDatabase(databaseName);
                 database.Drop();
-                Console.WriteLine("Successfully dropped databse.");
+                Console.WriteLine("Successfully dropped databse!");
             }
             else
             {
                 Console.WriteLine("Database does not exist!");
             }
+
             Console.WriteLine();
         }
 
@@ -250,8 +252,18 @@ namespace Beekeeper
         /// <param name="ldfFileLocation">LDF file location</param>
         private static void RestoreDatabase(string serverName, string databaseName, string databaseBackupFileLocation, string mdfFileLocation = null, string ldfFileLocation = null)
         {
-            Console.WriteLine("About to restore database '{0}' on server '{1}'", databaseName, serverName);
+            Console.WriteLine("About to restore database '{0}' on server '{1}' ...", databaseName, serverName);
             var server = InitialiseServer(serverName);
+            var database = server.Databases[databaseName];
+
+            if (database != null)
+            {
+                Console.WriteLine("Database already exists, removing the current one ...");
+                DropDatabase(serverName, databaseName);
+                Console.WriteLine("Database has been successfully removed!");
+            }
+
+            Console.WriteLine("Restoring database ...");
             var restore = new Restore
             {
                 Database = databaseName,
@@ -259,58 +271,77 @@ namespace Beekeeper
                 ReplaceDatabase = true,
             };
             restore.Devices.AddDevice(databaseBackupFileLocation, DeviceType.File);
-
             if (!String.IsNullOrEmpty(mdfFileLocation) && !String.IsNullOrEmpty(ldfFileLocation))
             {
                 restore.RelocateFiles.Add(new RelocateFile(databaseName, String.Format(@"{0}\{1}.mdf", mdfFileLocation, databaseName)));
                 restore.RelocateFiles.Add(new RelocateFile(String.Format("{0}_Log", databaseName), String.Format(@"{0}\{1}.ldf", ldfFileLocation, databaseName)));
             }
-            
             restore.SqlRestore(server);
-            Console.WriteLine("Successfully restored databse.");
+
+            Console.WriteLine("Successfully restored databse!");
             Console.WriteLine();
         }
 
-
-
-        private static string GetConnectionString(string serverName, string databaseName)
+        private static string GetConnectionString(string serverName, string databaseName, string login = null, string password = null)
         {
-            var connBuilder = new SqlConnectionStringBuilder
+            var connectionStringBuilder = new SqlConnectionStringBuilder
             {
                 DataSource = serverName,
                 InitialCatalog = databaseName,
                 IntegratedSecurity = true
             };
 
-            return connBuilder.ConnectionString;
+            if (!String.IsNullOrEmpty(login) && !String.IsNullOrEmpty(password))
+            {
+                connectionStringBuilder.UserID = login;
+                connectionStringBuilder.Password = password;
+            }
+
+            return connectionStringBuilder.ConnectionString;
         }
 
-        private static object ExecuteCommandWithResult(string command, string connectionString)
+        // TODO: test
+        private static void RestoreDatabaseUsingSqlBackup(string serverName, string databaseName, string sourceFile, string standByFileLocation, string mdfFileLocation = null, string ldfFileLocation = null)
         {
-            using (var conn = new SqlConnection(connectionString))
+            Console.WriteLine("About to restore database '{0}' on server '{1}' ...", databaseName, serverName);
+            var server = InitialiseServer(serverName);
+            var database = server.Databases[databaseName];
+
+            if (database != null)
             {
-                conn.Open();
-                using (var cmd = new SqlCommand(command, conn))
+                Console.WriteLine("Database already exists, removing the current one ...");
+                DropDatabase(serverName, databaseName);
+                Console.WriteLine("Database has been successfully removed!");
+            }
+
+            Console.WriteLine("Restoring database ...");
+            var connectionString = GetConnectionString(serverName, databaseName);
+            using (var connection = new SqlConnection(connectionString))
+            {
+                var standBy = String.Format(@"{0}\{1}_StandBy.dat", standByFileLocation, databaseName);
+                var mdf = String.Format(@"{0}\{1}.mdf", mdfFileLocation, databaseName);
+                var ldf = String.Format(@"{0}\{1}.ldf", ldfFileLocation, databaseName);
+                var statement = String.Format(@"EXECUTE master..sqlbackup 
+                    '-SQL ""RESTORE DATABASE [{0}] 
+                    FROM DISK = ''{1}'' 
+                    WITH STANDBY = ''{2}'', 
+                    MOVE ''{3}'' TO ''{4}'', 
+                    MOVE ''{5}_Log'' TO ''{6}''""' "
+                        , databaseName, sourceFile, standBy, databaseName, mdf, databaseName, ldf);
+
+                using (var command = new SqlCommand(statement))
                 {
-                    return cmd.ExecuteScalar();
+                    connection.Open();
+                    command.CommandType = CommandType.Text;
+                    command.ExecuteNonQuery();
                 }
             }
+
+            Console.WriteLine("Successfully restored databse!");
+            Console.WriteLine();
         }
 
-        private static bool TableExists(string serverName, string databaseName)
-        {
-            var exists = false;
-            var command = String.Format(@"SELECT name FROM master.dbo.sysdatabases WHERE name = N'{0}'", databaseName);
-            var connectionString = GetConnectionString(serverName, databaseName);
-
-            var result = ExecuteCommandWithResult(command, connectionString);
-            if (result != null && !String.IsNullOrEmpty(result.ToString()))
-            {
-                exists = true;
-            }
-
-            return exists;
-        }
+        
 
         private static List<string> GenerateRestoreQuery(string databaseName, string logshipFolderPath, string standbyFilePath)
         {
