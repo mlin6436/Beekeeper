@@ -12,6 +12,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using log4net;
 
 namespace Beekeeper
 {
@@ -25,8 +26,26 @@ namespace Beekeeper
         public static int WarningLevelRed = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelRed"]);
         public static int WarningLevelAmber = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelAmber"]);
 
+        //private static readonly log4net.ILog log = log4net.LogManager.GetLogger("ConsoleAppender");
+
         public static void Main(string[] args)
         {
+            log4net.Config.XmlConfigurator.Configure();
+            ILog log = LogManager.GetLogger("ConsoleAppender");
+
+            //try
+            //{
+            //    throw new System.IO.FileNotFoundException();
+            //}
+            //catch (Exception ex)
+            //{
+            //    log.Debug("Debug error logging", ex);
+            //    log.Info("Info error logging", ex);
+            //    log.Warn("Warn error logging", ex);
+            //    log.Error("Error error logging", ex);
+            //    log.Fatal("Fatal error logging", ex);
+            //}
+
             try
             {
                 var command = Args.Configuration.Configure<Command>().CreateAndBind(args);
@@ -35,6 +54,7 @@ namespace Beekeeper
                 {
                     if (String.IsNullOrEmpty(command.Directory))
                     {
+                        log.Error("Directory does not exist!");
                         Console.WriteLine("Directory does not exist!");
                         return;
                     }
