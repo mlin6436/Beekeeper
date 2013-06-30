@@ -13,6 +13,10 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using log4net;
+using Ninject;
+using Ninject.Modules;
+using Ninject.Extensions.Logging.Log4net;
+using Ninject.Extensions.Logging;
 
 namespace Beekeeper
 {
@@ -26,25 +30,12 @@ namespace Beekeeper
         public static int WarningLevelRed = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelRed"]);
         public static int WarningLevelAmber = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelAmber"]);
 
-        //private static readonly log4net.ILog log = log4net.LogManager.GetLogger("ConsoleAppender");
-
         public static void Main(string[] args)
         {
             log4net.Config.XmlConfigurator.Configure();
-            ILog log = LogManager.GetLogger("ConsoleAppender");
-
-            //try
-            //{
-            //    throw new System.IO.FileNotFoundException();
-            //}
-            //catch (Exception ex)
-            //{
-            //    log.Debug("Debug error logging", ex);
-            //    log.Info("Info error logging", ex);
-            //    log.Warn("Warn error logging", ex);
-            //    log.Error("Error error logging", ex);
-            //    log.Fatal("Fatal error logging", ex);
-            //}
+            var kernel = CreateKernel();
+            var loggerFactory = kernel.Get<ILoggerFactory>();
+            var logger = loggerFactory.GetCurrentClassLogger();
 
             try
             {
@@ -54,7 +45,7 @@ namespace Beekeeper
                 {
                     if (String.IsNullOrEmpty(command.Directory))
                     {
-                        log.Error("Directory does not exist!");
+                        logger.Error("Directory does not exist!");
                         Console.WriteLine("Directory does not exist!");
                         return;
                     }
@@ -110,6 +101,16 @@ namespace Beekeeper
                 Console.WriteLine("----> EXCEPTION: {0} <----", ex.Message);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Create kernel.
+        /// </summary>
+        /// <returns>Kernel</returns>
+        protected static IKernel CreateKernel()
+        {
+            var settings = new NinjectSettings { LoadExtensions = false };
+            return new StandardKernel(settings, new INinjectModule[] { new Log4NetModule() });
         }
 
         /// <summary>
