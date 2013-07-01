@@ -4,11 +4,11 @@ using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using Beekeeper.Common;
+using Beekeeper.Entities;
 
-namespace Beekeeper
+namespace Beekeeper.Managers
 {
     public class FileManager
     {

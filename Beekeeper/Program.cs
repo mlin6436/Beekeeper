@@ -1,19 +1,8 @@
-﻿using System.Data;
-using Args.Help.Formatters;
-using Microsoft.SqlServer.Management.Common;
-using Microsoft.SqlServer.Management.Sdk.Sfc;
-using Microsoft.SqlServer.Management.Smo;
+﻿using Args.Help.Formatters;
+using Beekeeper.Common;
+using Beekeeper.Entities;
+using Beekeeper.Managers;
 using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Data.SqlClient;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using log4net;
 using Ninject;
 using Ninject.Modules;
 using Ninject.Extensions.Logging.Log4net;
@@ -23,9 +12,6 @@ namespace Beekeeper
 {
     public class Program
     {
-        public static int WarningLevelRed = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelRed"]);
-        public static int WarningLevelAmber = Int32.Parse(ConfigurationManager.AppSettings["WarningLevelAmber"]);
-
         public static void Main(string[] args)
         {
             log4net.Config.XmlConfigurator.Configure();

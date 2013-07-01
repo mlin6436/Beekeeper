@@ -1,12 +1,8 @@
 ﻿using Args;
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Beekeeper.Entities;
 
-namespace Beekeeper
+namespace Beekeeper.Common
 {
     public class Command
     {
