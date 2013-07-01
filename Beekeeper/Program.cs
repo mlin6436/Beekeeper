@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using Args.Help.Formatters;
 using Microsoft.SqlServer.Management.Common;
 using Microsoft.SqlServer.Management.Sdk.Sfc;
 using Microsoft.SqlServer.Management.Smo;
@@ -41,11 +42,17 @@ namespace Beekeeper
             {
                 var command = Args.Configuration.Configure<Command>().CreateAndBind(args);
 
-                if (command.Action.Equals(CommandOption.CheckStatus))
+                if (command.Action.Equals(CommandOption.None))
+                {
+                    var definition = Args.Configuration.Configure<Command>();
+                    var help = new Args.Help.HelpProvider().GenerateModelHelp(definition);
+                    var formatter = new ConsoleHelpFormatter(80, 1, 5);
+                    Console.WriteLine(formatter.GetHelp(help));
+                }
+                else if (command.Action.Equals(CommandOption.CheckStatus))
                 {
                     if (String.IsNullOrEmpty(command.Directory))
                     {
-                        logger.Error("Directory does not exist!");
                         Console.WriteLine("Directory does not exist!");
                         return;
                     }
@@ -98,6 +105,7 @@ namespace Beekeeper
             }
             catch (Exception ex)
             {
+                logger.Error(ex.Message);
                 Console.WriteLine("----> EXCEPTION: {0} <----", ex.Message);
                 throw;
             }

@@ -8,6 +8,7 @@ namespace Beekeeper
 {
     public enum CommandOption
     {
+        None,
         CheckStatus,
         DropDatabase,
         RestoreDatabase,
