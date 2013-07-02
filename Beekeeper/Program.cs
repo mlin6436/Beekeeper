@@ -55,8 +55,8 @@ namespace Beekeeper
                         return;
                     }
 
-                    var databaseManager = new DatabaseManager();
-                    databaseManager.DropDatabase(command.Server, command.Database);
+                    var databaseManager = new DatabaseManager(command.Server);
+                    databaseManager.DropDatabase(command.Database);
                 }
                 else if (command.Action.Equals(CommandOption.RestoreDatabase))
                 {
@@ -78,8 +78,13 @@ namespace Beekeeper
                         return;
                     }
 
-                    var databaseManager = new DatabaseManager();
-                    databaseManager.RestoreDatabase(command.Server, command.Database, command.DatabaseBackupFile);
+                    var databaseRestoreSettings = new DatabaseRestoreSettings
+                        {
+                            DatabaseName = command.Database,
+                            BackupFilePath = command.DatabaseBackupFile,
+                        };
+                    var databaseManager = new DatabaseManager(command.Server);
+                    databaseManager.RestoreDatabase(databaseRestoreSettings);
                 }
                 else
                 {
