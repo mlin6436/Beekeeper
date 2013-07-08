@@ -8,6 +8,12 @@
         RestoreDatabase,
         RestoreDatabaseUsingSqlBackup,
         GenerateRestoreQuery,
-        Test,
+    }
+
+    public enum WarningLevel
+    {
+        Red = 1,
+        Amber = 2,
+        Green = 3
     }
 }
