@@ -67,11 +67,8 @@
     <Compile Include="Common\Command.cs" />
     <Compile Include="Entities\DatabaseRestoreSettings.cs" />
     <Compile Include="Entities\Enum.cs" />
-    <Compile Include="Entities\Logship.cs" />
     <Compile Include="Interfaces\IDatabaseManager.cs" />
-    <Compile Include="Interfaces\IFileManager.cs" />
     <Compile Include="Managers\DatabaseManager.cs" />
-    <Compile Include="Managers\FileManager.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
